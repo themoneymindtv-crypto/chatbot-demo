@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Julia Studio — Demo Bot</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface2: #1c1c1c;
+  --accent: #b5f542;
+  --accent-dim: rgba(181,245,66,0.15);
+  --cream: #f5f0e8;
+  --muted: #666;
+  --border: rgba(255,255,255,0.08);
+  --radius: 20px;
+}
+
+body {
+  background: var(--bg);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--cream);
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 50% 40% at 10% 90%, rgba(181,245,66,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 50% at 90% 10%, rgba(181,245,66,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* ── DEMO WRAPPER (fake website behind bot) ── */
+.demo-page {
+  position: fixed; inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 0;
+}
+
+.demo-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(28px, 5vw, 52px);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--cream);
+  opacity: 0.9;
+}
+
+.demo-tagline {
+  font-size: clamp(13px, 2vw, 16px);
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.demo-nav {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 24px;
+  font-size: 13px; color: var(--muted);
+  letter-spacing: 0.08em;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+/* ── LANGUAGE SWITCHER ── */
+.lang-switcher {
+  position: fixed; top: 56px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 6px;
+  z-index: 1000;
+}
+.lang-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  padding: 5px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.lang-btn:hover, .lang-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+/* ── CHAT TOGGLE BUTTON ── */
+.chat-toggle {
+  position: fixed;
+  bottom: 28px; right: 28px;
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999;
+  box-shadow: 0 8px 32px rgba(181,245,66,0.35);
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s;
+}
+.chat-toggle:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 40px rgba(181,245,66,0.45);
+}
+.chat-toggle svg { transition: transform 0.3s; }
+.chat-toggle.open svg { transform: rotate(45deg); }
+
+/* ── CHAT WINDOW ── */
+.chat-window {
+  position: fixed;
+  bottom: 100px; right: 28px;
+  width: min(380px, calc(100vw - 40px));
+  height: min(540px, calc(100vh - 140px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  z-index: 998;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(181,245,66,0.05);
+  transform: translateY(20px) scale(0.95);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease;
+}
+.chat-window.open {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Header */
+.chat-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface2);
+  flex-shrink: 0;
+}
+.chat-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, #7ab82e 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+  position: relative;
+}
+.chat-avatar::after {
+  content: '';
+  position: absolute; bottom: 1px; right: 1px;
+  width: 9px; height: 9px;
+  background: #4ade80; border-radius: 50%;
+  border: 2px solid var(--surface2);
+}
+.chat-header-text {}
+.chat-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 15px; font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.chat-status { font-size: 11px; color: #4ade80; margin-top: 1px; }
+
+/* Messages */
+.chat-messages {
+  flex: 1; overflow-y: auto;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  scroll-behavior: smooth;
+}
+.chat-messages::-webkit-scrollbar { width: 3px; }
+.chat-messages::-webkit-scrollbar-track { background: transparent; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.msg {
+  display: flex; flex-direction: column;
+  max-width: 82%;
+  animation: msgIn 0.3s cubic-bezier(0.34,1.3,0.64,1) both;
+}
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.msg.bot { align-self: flex-start; }
+.msg.user { align-self: flex-end; }
+
+.msg-bubble {
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.msg.bot .msg-bubble {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--cream);
+  border-bottom-left-radius: 4px;
+}
+.msg.user .msg-bubble {
+  background: var(--accent);
+  color: #0a0a0a;
+  font-weight: 500;
+  border-bottom-right-radius: 4px;
+}
+
+/* Quick reply chips */
+.chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 4px;
+  animation: msgIn 0.3s 0.1s both;
+}
+.chip {
+  background: none;
+  border: 1px solid rgba(181,245,66,0.4);
+  color: var(--accent);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.chip:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* Typing indicator */
+.typing {
+  display: flex; align-items: center; gap: 4px;
+  padding: 12px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 16px; border-bottom-left-radius: 4px;
+  width: fit-content;
+  align-self: flex-start;
+}
+.typing span {
+  width: 6px; height: 6px;
+  background: var(--muted);
+  border-radius: 50%;
+  animation: bounce 1.2s ease-in-out infinite;
+}
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+/* Input area */
+.chat-input-area {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 8px; align-items: flex-end;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.chat-input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 14px;
+  color: var(--cream);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+  max-height: 100px;
+  line-height: 1.4;
+}
+.chat-input::placeholder { color: var(--muted); }
+.chat-input:focus { border-color: rgba(181,245,66,0.4); }
+
+.send-btn {
+  width: 38px; height: 38px; flex-shrink: 0;
+  background: var(--accent);
+  border: none; border-radius: 50%;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.send-btn:hover { transform: scale(1.08); }
+.send-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+/* Success */
+.success-msg {
+  text-align: center;
+  padding: 20px;
+  font-size: 13px;
+  color: var(--accent);
+  line-height: 1.6;
+}
+
+@keyframes pulseRing {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.06); opacity: 0.15; }
+}
+</style>
+</head>
+<body>
+
+<!-- Fake website background -->
+<div class="demo-page" id="demoBg">
+  <div class="demo-nav">
+    <span onclick="scrollToServices()" style="cursor:pointer;transition:color 0.2s" onmouseover="this.style.color='#b5f542'" onmouseout="this.style.color=''">Услуги</span>
+    <span onclick="window.open('https://juliadesign.art','_blank')" style="cursor:pointer;transition:color 0.2s" onmouseover="this.style.color='#b5f542'" onmouseout="this.style.color=''">Портфолио</span>
+    <span onclick="openChat()" style="cursor:pointer;transition:color 0.2s" onmouseover="this.style.color='#b5f542'" onmouseout="this.style.color=''">Контакт</span>
+  </div>
+  <div class="demo-logo">studio.</div>
+  <div class="demo-tagline">Web Design & Chatbots · Tallinn</div>
+
+  <!-- Services panel -->
+  <div id="servicesSection" style="display:none;position:absolute;bottom:0;left:0;right:0;padding:32px 24px 40px;border-top:1px solid rgba(181,245,66,0.12);background:rgba(10,10,10,0.97);flex-direction:column;align-items:center;gap:20px">
+    <div style="font-family:'Playfair Display',serif;font-size:20px;letter-spacing:0.03em;color:#f5f0e8">Услуги</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%">
+      <div style="border:1px solid rgba(181,245,66,0.2);border-radius:14px;padding:14px 18px;font-size:13px;flex:1;min-width:130px;max-width:160px">
+        <div style="font-size:22px;margin-bottom:6px">🌐</div>
+        <div style="font-weight:500;margin-bottom:3px;color:#f5f0e8">Сайт</div>
+        <div style="color:#555;font-size:11px">от 300€ · 2–3 нед.</div>
+      </div>
+      <div style="border:1px solid rgba(181,245,66,0.2);border-radius:14px;padding:14px 18px;font-size:13px;flex:1;min-width:130px;max-width:160px">
+        <div style="font-size:22px;margin-bottom:6px">🤖</div>
+        <div style="font-weight:500;margin-bottom:3px;color:#f5f0e8">Чат-бот</div>
+        <div style="color:#555;font-size:11px">от 150€ · 3–5 дней</div>
+      </div>
+      <div style="border:1px solid rgba(181,245,66,0.2);border-radius:14px;padding:14px 18px;font-size:13px;flex:1;min-width:130px;max-width:160px">
+        <div style="font-size:22px;margin-bottom:6px">✦</div>
+        <div style="font-weight:500;margin-bottom:3px;color:#f5f0e8">Пакет</div>
+        <div style="color:#555;font-size:11px">от 400€ · сайт+бот</div>
+      </div>
+    </div>
+    <button onclick="document.getElementById('servicesSection').style.display='none'" style="background:none;border:1px solid rgba(255,255,255,0.1);color:#555;font-size:11px;padding:5px 16px;border-radius:20px;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Закрыть</button>
+  </div>
+
+  <!-- Services panel -->
+  <div id="servicesSection" style="display:none;position:absolute;bottom:0;left:0;right:0;padding:32px 20px 36px;border-top:1px solid rgba(181,245,66,0.12);background:rgba(10,10,10,0.97);flex-direction:column;align-items:center;gap:18px">
+    <div style="font-family:Playfair Display,serif;font-size:20px;letter-spacing:0.03em;color:#f5f0e8">Услуги</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%">
+      <div style="border:1px solid rgba(181,245,66,0.2);border-radius:14px;padding:14px 16px;font-size:13px;flex:1;min-width:120px;max-width:150px;text-align:center">
+        <div style="font-size:22px;margin-bottom:6px">🌐</div>
+        <div style="font-weight:500;margin-bottom:3px;color:#f5f0e8">Сайт</div>
+        <div style="color:#555;font-size:11px">от 300€ · 2–3 нед.</div>
+      </div>
+      <div style="border:1px solid rgba(181,245,66,0.2);border-radius:14px;padding:14px 16px;font-size:13px;flex:1;min-width:120px;max-width:150px;text-align:center">
+        <div style="font-size:22px;margin-bottom:6px">🤖</div>
+        <div style="font-weight:500;margin-bottom:3px;color:#f5f0e8">Чат-бот</div>
+        <div style="color:#555;font-size:11px">от 150€ · 3–5 дней</div>
+      </div>
+      <div style="border:1px solid rgba(181,245,66,0.2);border-radius:14px;padding:14px 16px;font-size:13px;flex:1;min-width:120px;max-width:150px;text-align:center">
+        <div style="font-size:22px;margin-bottom:6px">✦</div>
+        <div style="font-weight:500;margin-bottom:3px;color:#f5f0e8">Пакет</div>
+        <div style="color:#555;font-size:11px">от 400€ · сайт+бот</div>
+      </div>
+    </div>
+    <button onclick="document.getElementById('servicesSection').style.display='none'" style="background:none;border:1px solid rgba(255,255,255,0.1);color:#666;font-size:11px;padding:5px 16px;border-radius:20px;cursor:pointer">✕ Закрыть</button>
+  </div>
+</div>
+
+<!-- Language switcher -->
+<div class="lang-switcher">
+  <button class="lang-btn active" onclick="setLang('ru')">RU</button>
+  <button class="lang-btn" onclick="setLang('en')">EN</button>
+  <button class="lang-btn" onclick="setLang('et')">ET</button>
+</div>
+
+<!-- Chat toggle -->
+<button class="chat-toggle" id="toggleBtn" onclick="toggleChat()">
+  <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+
+<!-- Chat window -->
+<div class="chat-window" id="chatWindow">
+  <div class="chat-header">
+    <div class="chat-avatar">✦</div>
+    <div class="chat-header-text">
+      <div class="chat-name" id="chatName">Julia Studio</div>
+      <div class="chat-status" id="chatStatus">онлайн</div>
+    </div>
+  </div>
+
+  <div class="chat-messages" id="chatMessages"></div>
+
+  <div class="chat-input-area">
+    <textarea class="chat-input" id="chatInput" rows="1"
+      placeholder="Напишите сообщение..."
+      onkeydown="handleKey(event)"
+      oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+      <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+        <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+// ── TRANSLATIONS ──────────────────────────────────────────────────────────────
+const T = {
+  ru: {
+    status: "онлайн",
+    placeholder: "Напишите сообщение...",
+    greeting: "Привет! 👋 Я помогаю найти нужную услугу. Что вас интересует?",
+    options: ["🌐 Хочу сайт", "🤖 Хочу чат-бота", "💰 Цены", "📁 Портфолио", "✉️ Связаться"],
+    site: "Создаю современные сайты под ключ — красивый дизайн, быстрая загрузка, поддержка 3 языков. Срок: 2–3 недели. Стоимость от 300€.\n\nОставьте имя и контакт — Юля свяжется с вами 🌿",
+    bot: "Чат-бот на ваш сайт или Instagram — отвечает клиентам 24/7, собирает заявки автоматически, не требует вашего внимания.\n\nУстановка от 150€. Хотите такой же? 🤖",
+    price: "💰 Прайс:\n• Чат-бот — от 150€\n• Сайт — от 300€\n• Сайт + бот — от 400€\n\nВсё индивидуально. Напишите — обсудим детали!",
+    portfolio: "Смотрите работы на juliadesign.art 🎨\n\nТам примеры сайтов и ботов для разных бизнесов. Хотите что-то похожее?",
+    contact: "Отлично! Напишите ваше имя и email или телефон — Юля свяжется с вами сегодня ✨",
+    askContact: "Как вас зовут и как с вами связаться? (email или телефон)",
+    thanks: "Спасибо! ✨\n\nЮля свяжется с вами в течение нескольких часов. Хорошего дня!",
+    sending: "Отправляю...",
+  },
+  en: {
+    status: "online",
+    placeholder: "Type a message...",
+    greeting: "Hi! 👋 I'm here to help you find the right service. What are you looking for?",
+    options: ["🌐 I need a website", "🤖 I need a chatbot", "💰 Pricing", "📁 Portfolio", "✉️ Contact"],
+    site: "I build modern websites — beautiful design, fast loading, 3-language support. Timeline: 2–3 weeks. From 300€.\n\nLeave your name and contact — Julia will reach out 🌿",
+    bot: "A chatbot for your website or Instagram — answers clients 24/7, collects leads automatically.\n\nFrom 150€. Want one like this? 🤖",
+    price: "💰 Pricing:\n• Chatbot — from 150€\n• Website — from 300€\n• Website + bot — from 400€\n\nEverything is individual. Let's talk!",
+    portfolio: "See my work at juliadesign.art 🎨\n\nWebsites and bots for various businesses. Want something similar?",
+    contact: "Great! Share your name and email or phone — Julia will contact you today ✨",
+    askContact: "What's your name and how can I reach you? (email or phone)",
+    thanks: "Thank you! ✨\n\nJulia will get back to you within a few hours. Have a great day!",
+    sending: "Sending...",
+  },
+  et: {
+    status: "võrgus",
+    placeholder: "Kirjuta sõnum...",
+    greeting: "Tere! 👋 Aitan leida sobiva teenuse. Mis teid huvitab?",
+    options: ["🌐 Tahan veebisaiti", "🤖 Tahan vestlusrobotit", "💰 Hinnad", "📁 Portfoolio", "✉️ Võtke ühendust"],
+    site: "Loon kaasaegseid veebisaite — ilus disain, kiire laadimine, 3-keelne tugi. Tähtaeg: 2–3 nädalat. Alates 300€.\n\nJätke nimi ja kontakt — Julia võtab teiega ühendust 🌿",
+    bot: "Vestlusrobot teie veebisaidile või Instagrami — vastab klientidele 24/7, kogub päringuid automaatselt.\n\nAlates 150€. Kas soovite sellist? 🤖",
+    price: "💰 Hinnad:\n• Vestlusrobot — alates 150€\n• Veebisait — alates 300€\n• Sait + robot — alates 400€\n\nKõik on individuaalne. Räägime!",
+    portfolio: "Vaadake töid aadressil juliadesign.art 🎨\n\nVeebisaite ja roboteid erinevatele ettevõtetele. Soovite midagi sarnast?",
+    contact: "Suurepärane! Kirjutage oma nimi ja e-post või telefon — Julia võtab teiega täna ühendust ✨",
+    askContact: "Mis on teie nimi ja kuidas teiega ühendust võtta? (e-post või telefon)",
+    thanks: "Tänan! ✨\n\nJulia võtab teiega mõne tunni jooksul ühendust. Head päeva!",
+    sending: "Saadan...",
+  }
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let lang = 'ru';
+let isOpen = false;
+let awaitingContact = false;
+let started = false;
+
+// ── LANG ──────────────────────────────────────────────────────────────────────
+function setLang(l) {
+  lang = l;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.lang-btn:nth-child(${l==='ru'?1:l==='en'?2:3})`).classList.add('active');
+  document.getElementById('chatStatus').textContent = T[l].status;
+  document.getElementById('chatInput').placeholder = T[l].placeholder;
+
+  if (!started) return;
+  // Re-open with new language greeting
+  clearMessages();
+  started = false;
+  awaitingContact = false;
+  setTimeout(() => startChat(), 200);
+}
+
+// ── TOGGLE ────────────────────────────────────────────────────────────────────
+function toggleChat() {
+  isOpen = !isOpen;
+  document.getElementById('chatWindow').classList.toggle('open', isOpen);
+  document.getElementById('toggleBtn').classList.toggle('open', isOpen);
+  if (isOpen && !started) {
+    started = true;
+    setTimeout(() => startChat(), 300);
+  }
+}
+
+// ── MESSAGES ──────────────────────────────────────────────────────────────────
+function clearMessages() {
+  document.getElementById('chatMessages').innerHTML = '';
+}
+
+function addMessage(text, type, delay = 0) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      const container = document.getElementById('chatMessages');
+      const msg = document.createElement('div');
+      msg.className = `msg ${type}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      bubble.style.whiteSpace = 'pre-wrap';
+      bubble.textContent = text;
+      msg.appendChild(bubble);
+      container.appendChild(msg);
+      container.scrollTop = container.scrollHeight;
+      resolve();
+    }, delay);
+  });
+}
+
+function showTyping() {
+  const container = document.getElementById('chatMessages');
+  const el = document.createElement('div');
+  el.className = 'typing'; el.id = 'typingIndicator';
+  el.innerHTML = '<span></span><span></span><span></span>';
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+}
+
+function hideTyping() {
+  const el = document.getElementById('typingIndicator');
+  if (el) el.remove();
+}
+
+function showChips(options) {
+  const container = document.getElementById('chatMessages');
+  const chips = document.createElement('div');
+  chips.className = 'chips'; chips.id = 'quickChips';
+  options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.textContent = opt;
+    btn.onclick = () => handleChip(i);
+    chips.appendChild(btn);
+  });
+  container.appendChild(chips);
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeChips() {
+  const el = document.getElementById('quickChips');
+  if (el) el.remove();
+}
+
+// ── FLOW ──────────────────────────────────────────────────────────────────────
+async function startChat() {
+  showTyping();
+  await new Promise(r => setTimeout(r, 900));
+  hideTyping();
+  await addMessage(T[lang].greeting, 'bot');
+  showChips(T[lang].options);
+}
+
+async function handleChip(idx) {
+  const label = T[lang].options[idx];
+  removeChips();
+  await addMessage(label, 'user');
+
+  showTyping();
+  await new Promise(r => setTimeout(r, 800));
+  hideTyping();
+
+  const t = T[lang];
+  // 0=сайт, 1=бот, 2=цены, 3=портфолио, 4=контакт
+  const replies =  [t.site, t.bot, t.price, t.portfolio, t.contact];
+  const contacts = [true,   true,  false,   false,        true];
+
+  let reply = replies[idx] || t.contact;
+  let askContact = contacts[idx] || false;
+
+  await addMessage(reply, 'bot');
+
+  if (askContact) {
+    await new Promise(r => setTimeout(r, 400));
+    showTyping();
+    await new Promise(r => setTimeout(r, 600));
+    hideTyping();
+    await addMessage(t.askContact, 'bot');
+    awaitingContact = true;
+  } else {
+    showChips(t.options);
+  }
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  autoResize(input);
+  removeChips();
+  await addMessage(text, 'user');
+
+  if (awaitingContact) {
+    awaitingContact = false;
+    await submitLead(text);
+  } else {
+    // Generic fallback
+    showTyping();
+    await new Promise(r => setTimeout(r, 700));
+    hideTyping();
+    await addMessage(T[lang].contact, 'bot');
+    awaitingContact = true;
+  }
+}
+
+async function submitLead(contactInfo) {
+  showTyping();
+  await new Promise(r => setTimeout(r, 1000));
+  hideTyping();
+
+  // Send to Formspree (replace xgorqwvn with real one)
+  try {
+    await fetch('https://formspree.io/f/xgorqwvn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        contact: contactInfo,
+        language: lang,
+        source: 'juliadesign.art chatbot',
+        _subject: `Новая заявка с сайта — ${contactInfo}`
+      })
+    });
+  } catch(e) {}
+
+  await addMessage(T[lang].thanks, 'bot');
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function scrollToServices() {
+  const s = document.getElementById('servicesSection');
+  s.style.display = s.style.display === 'flex' ? 'none' : 'flex';
+}
+function openChat() {
+  if (!isOpen) toggleChat();
+}
+
+</script>
+</body>
+</html>
